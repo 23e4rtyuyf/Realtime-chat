@@ -1,0 +1,62 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require("socket.io");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+const PORT = process.env.PORT || 3000;
+
+// Serve the HTML file to the client
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+// Admin credentials (hardcoded as requested)
+const ADMIN_USER = "cyrus";
+const ADMIN_PASS = "hell67";
+
+io.on('connection', (socket) => {
+  console.log('A user is trying to connect...');
+
+  // 1. Authentication
+  socket.on('authenticate', (data) => {
+    if (data.username === ADMIN_USER && data.password === ADMIN_PASS) {
+      console.log(`User '${data.username}' authenticated successfully.`);
+      socket.emit('authenticated');
+
+      // Announce that the admin has joined
+      io.emit('chat message', {
+        user: 'System',
+        message: `${data.username} has joined the chat.`
+      });
+
+      // 2. Handle incoming chat messages after authentication
+      socket.on('chat message', (msg) => {
+        // Broadcast the message to all connected clients
+        io.emit('chat message', { user: data.username, message: msg });
+      });
+
+      // 3. Handle disconnection
+      socket.on('disconnect', () => {
+        console.log(`User '${data.username}' disconnected.`);
+        // Announce that the admin has left
+        io.emit('chat message', {
+          user: 'System',
+          message: `${data.username} has left the chat.`
+        });
+      });
+
+    } else {
+      // If authentication fails, notify the client and disconnect
+      console.log(`Authentication failed for user: '${data.username}'`);
+      socket.emit('auth_error');
+      socket.disconnect();
+    }
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server listening on *:${PORT}`);
+});
